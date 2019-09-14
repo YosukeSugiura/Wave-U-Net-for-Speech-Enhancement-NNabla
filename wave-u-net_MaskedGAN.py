@@ -370,30 +370,15 @@ def train(args):
             nn.load_parameters(os.path.join(args.model_save_path, 'param_{:04}.h5'.format(args.epoch_from)))
 
     ##  Update parameters
-    class updating:
+    def updating(learning_rate, scope=""):
 
         # solver setting
-        def __init__(self, learning_rate, scope=""):
-            self.solver = S.Adam(learning_rate)  # solver set
+        solver = S.Adam(learning_rate)  # solver set
 
-            with nn.parameter_scope(scope):
-                self.solver.set_parameters(nn.get_parameters())  # parameter set
+        with nn.parameter_scope(scope):
+            solver.set_parameters(nn.get_parameters())  # parameter set
 
-            self.scale = 8 if args.halfprec else 1  # 32bit or 16bit
-
-        # forward
-        def forward(self, loss):
-            loss.forward(clear_no_need_grad=True)
-            self.solver.zero_grad()  # initialize
-
-        # backward
-        def backward(self, val):
-            val.backward(self.scale, clear_buffer=True)
-
-        # update
-        def update(self):
-            self.solver.scale_grad(1. / self.scale)  # scaling
-            self.solver.update()  # update
+        return solver
 
 
     ## --------------------------------- ##
@@ -411,38 +396,39 @@ def train(args):
     ## --------------------------------- ##
     ##  Generator
     target_1, target_2, latent = Wave_U_Net(noisy, latent=True)
-    target_1ul  = target_1.get_unlinked_variable()  # Unlinked Parameter
-    target_2ul  = target_2.get_unlinked_variable()  # Unlinked Parameter
-    latent_ul   = latent.get_unlinked_variable()    # Unlinked Parameter
+    target_1.persistent = True
+    target_1ul  = target_1.get_unlinked_variable(need_grad=True)  # Unlinked Parameter
+    latent_ul   = latent.get_unlinked_variable(need_grad=True)    # Unlinked Parameter
 
     ##  Mapping
     map_out, map_mask = Mapping(latent_ul)
-    map_mask_ul = map_mask.get_unlinked_variable()  # Unlinked Parameter
 
     ##  Mask
     window = nn.Variable.from_numpy_array(Mask_Window(args.batch_size))
-    mask = F.batch_matmul(map_mask_ul, window)
+    mask = F.batch_matmul(map_mask, window)
+    mask_ul = mask.get_unlinked_variable(need_grad=False)
 
     ##  Discriminator
-    Input_dis_real  = F.concatenate(noisy, mask, clean, axis=1)
-    Input_dis_fake  = F.concatenate(noisy, mask, target_1ul, axis=1)
-    real_dis        = Discriminator(Input_dis_real)
-    fake_dis        = Discriminator(Input_dis_fake)
-    fake_dis_ul     = fake_dis.get_unlinked_variable()
+    Input_real  = F.concatenate(noisy, mask_ul, clean, axis=1)
+    Input_fake  = F.concatenate(noisy, mask_ul, target_1, axis=1)
+    Input_fake_ul = F.concatenate(noisy, mask_ul, target_1ul, axis=1)
+    real_dis        = Discriminator(Input_real)
+    fake_dis        = Discriminator(Input_fake)
+    fake_dis_ul     = Discriminator(Input_fake_ul)
 
     ## --------------------------------- ##
     ##      Loss & Updator               ##
     ## --------------------------------- ##
     ##  Loss ( order of calculation )
     loss_map = Loss_rec(map_out, latent_ul)
-    loss_dis = Loss_dis(real_dis, fake_dis)
-    loss_gen = Loss_gen(target_1ul, clean, target_2ul, noisy - clean, fake_dis_ul, no_fake=True)
+    loss_dis = Loss_dis(real_dis, fake_dis_ul)
+    loss_gen = Loss_gen(target_1, clean, target_2, noisy - clean, fake_dis, no_fake=True)
     loss_rec = Loss_rec(target_1ul, clean)      #   Reconstruction Loss
 
     ##  Optimizer: Adam
-    upd_gen = updating(args.learning_rate, scope='Wave-U-Net')
-    upd_dis = updating(args.learning_rate_dis, scope='dis')
-    upd_map = updating(args.learning_rate_dis, scope='map')
+    solver_gen = updating(args.learning_rate, scope='Wave-U-Net')
+    solver_dis = updating(args.learning_rate_dis, scope='dis')
+    solver_map = updating(args.learning_rate_dis, scope='map')
 
     ## --------------------------------- ##
     ##      Data Loader                  ##
@@ -495,22 +481,23 @@ def train(args):
             clean.d, noisy.d = batches.next(j)
 
             ##  Updating
-            target_1.forward() # "latent" is automatically executed
-            target_2.forward()
+            loss_gen.forward(clear_no_need_grad=True)
+            loss_map.forward(clear_no_need_grad=True)
+            mask.forward(clear_no_need_grad=True)
+            loss_dis.forward(clear_no_need_grad=True)
 
-            #upd_map.forward(loss_map)   # "map_out" is automatically executed
-            #upd_map.backward(loss_map)
-            #upd_map.update()
+            solver_gen.zero_grad()
+            solver_map.zero_grad()
+            solver_dis.zero_grad()
 
-            #upd_dis.forward(loss_dis)
-            #upd_dis.backward(loss_dis)
-            #upd_dis.update()
+            loss_gen.backward(clear_buffer=True)
+            solver_gen.update()
 
-            upd_gen.forward(loss_gen)
-            #upd_gen.backward(loss_gen)
-            target_1.backward(grad=None)
-            target_2.backward(grad=None)
-            upd_gen.update()
+            loss_map.backward(clear_buffer=True)
+            solver_map.update()
+
+            loss_dis.backward(clear_buffer=True)
+            solver_dis.update()
 
             ##  Display
             if (j) % 100 == 0:
