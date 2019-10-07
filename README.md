@@ -58,3 +58,16 @@ Please install the following packages with pip.
          For example, [this site](https://online-audio-converter.com/) is useful.
          After converting, you can delete the original wav data. 
     
+### Train & Predict
+
+If train, in `wave-u-net.py`, 
+
+```
+ Train = 1
+```
+
+If predict, in `wave-u-net.py`, 
+
+```
+ Train = 0
+```
