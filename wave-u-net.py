@@ -1,23 +1,14 @@
-# Copyright (c) 2017 Sony Corporation. All Rights Reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 from __future__ import absolute_import
 from six.moves import range
 
 import os
+import time
 import numpy as np
 
+# NNabla
 import nnabla as nn
 import nnabla.functions as F
 import nnabla.parametric_functions as PF
@@ -25,36 +16,139 @@ import nnabla.solvers as S
 import nnabla.initializer as I
 from nnabla.ext_utils import get_extension_context
 
-#   Figure
-# import matplotlib.pyplot as plt
-#   Figure
-# import matplotlib.pyplot as plt
+# Display
 import pyqtgraph as pg
 import pyqtgraph.exporters as pgex
 
+# Sound
+from scipy.io import wavfile
+from pypesq import pypesq
+
+# Original Functions
 from settings import settings
 import data as dt
-import time
 
 # -------------------------------------------
-#   Generator ( Encoder + Decoder )
-#   - output estimated clean wav
+#   PESQ
 # -------------------------------------------
-### tensor.shape: (batch_size, dim, time)
-def crop(tensor, target_times):
-    shape = tensor.shape[2]
-    diff = shape - target_times
-    if diff == 0:
-        return tensor
-    crop_start = diff // 2
-    crop_end = diff - crop_start
-    return F.slice(tensor, start=(0,0,crop_start), stop=(tensor.shape[0], tensor.shape[1], shape-crop_end), step=(1,1,1))
+## Display progress in console
+def pesq_score(clean_wavs, reconst_wavs, band='wb'):
 
-def crop_and_concat(x1, x2):
-    x1 = crop(x1, x2.shape[2])
-    return F.concatenate(x1, x2, axis=1)
+    scores    = []
 
+    print('PESQ Calculation...')
+    for i, (clean_, reconst_) in enumerate(zip(clean_wavs, reconst_wavs)):
+        rate, ref = wavfile.read(clean_)
+        rate, deg = wavfile.read(reconst_)
+        score = pypesq(rate, ref, deg, band)
+        scores.append(score)
+        print('Score : {0} ... {1}/{2}'.format(score, i, len(clean_wavs)))
+
+    score = np.average(np.array(scores))
+
+
+    print('  ---------------------------------------------------')
+    print('  Average PESQ score = {0}'.format(score))
+    print('  ---------------------------------------------------')
+
+    return 0
+
+## Display
+class display:
+
+    # Remaining Time Estimation
+    class time_estimation:
+
+        def __init__(self, epoch_from, epoch, batch_num):
+            self.start = time.time()
+            self.epoch = epoch
+            self.epoch_from = epoch_from
+            self.batch = batch_num
+            self.all = batch_num * (epoch - epoch_from)
+
+        def __call__(self, epoch_num, batch_num):
+            elapse = time.time() - self.start
+            amount = (batch_num + 1) + (epoch_num - self.epoch_from) * self.batch
+            remain = elapse / amount * (self.all - amount)
+
+            hours, mins = divmod(elapse, 3600)
+            mins, sec = divmod(mins, 60)
+            hours_e, mins_e = divmod(remain, 3600)
+            mins_e, sec_e = divmod(mins_e, 60)
+
+            elapse_time = [int(hours), int(mins), int(sec)]
+            remain_time = [int(hours_e), int(mins_e), int(sec_e)]
+
+            return elapse_time, remain_time
+
+    def __init__(self, epoch_from, epoch, batch_num):
+
+        self.tm = self.time_estimation(epoch_from, epoch, batch_num)
+        self.batch = batch_num
+
+    def __call__(self, epoch, trial, losses):
+
+        elapse_time, remain_time = self.tm(epoch, trial)
+        print('  ---------------------------------------------------')
+        print('  [ Epoch  # {0},    Trials  # {1}/{2} ]'.format(epoch + 1, trial + 1, self.batch))
+        print('    +  Mean Squared Loss        = {:.4f}'.format(losses))
+        print('    -------------------------')
+        print('    +  Elapsed Time            : {0[0]:3d}h {0[1]:02d}m {0[2]:02d}s'.format(elapse_time))
+        print('    +  Expected Remaining Time : {0[0]:3d}h {0[1]:02d}m {0[2]:02d}s'.format(remain_time))
+        print('  ---------------------------------------------------')
+
+## Create figure object and plot
+class figout:
+    def __init__(self):
+
+        ## Create Graphic Window
+        self.win = pg.GraphicsWindow(title="")
+        self.win.resize(800, 600)
+        self.win.setWindowTitle('pyqtgraph example: Plotting')
+        self.win.setBackground("#FFFFFFFF")
+        pg.setConfigOptions(antialias=True)     # Anti-Aliasing for clear plotting
+
+        ## Graph Layout
+        #   1st Col: Speech Waveform
+        self.p1 = self.win.addPlot(title="Source 1 Waveform")
+        self.p1.addLegend()
+        self.c11 = self.p1.plot(pen=(255, 0, 0, 255), name="In")
+        self.c12 = self.p1.plot(pen=(0, 255, 0, 150), name="Out1")
+        self.c13 = self.p1.plot(pen=(0, 0, 255, 90), name="Clean")
+        self.win.nextRow()
+        self.p2 = self.win.addPlot(title="Source 2 Waveform")
+        self.p2.addLegend()
+        self.c21 = self.p2.plot(pen=(255, 0, 0, 255), name="In")
+        self.c22 = self.p2.plot(pen=(0, 255, 0, 150), name="Out2")
+        self.c23 = self.p2.plot(pen=(0, 0, 255, 90), name="Clean")
+        self.win.nextRow()
+        #   2st Col-1: Loss
+        self.p3 = self.win.addPlot(title="Loss")
+        self.p3.addLegend()
+        self.c31 = self.p3.plot(pen=(255, 0, 0, 255), name="losses")
+        self.win.nextRow()
+
+    def waveform_1(self, noisy, target, clean, stride=10):
+        self.c11.setData(noisy[0:-1:stride])
+        self.c12.setData(target[0:-1:stride])
+        self.c13.setData(clean[0:-1:stride])
+
+    def waveform_2(self, noisy, target, clean, stride=10):
+        self.c21.setData(noisy[0:-1:stride])
+        self.c22.setData(target[0:-1:stride])
+        self.c23.setData(clean[0:-1:stride])
+
+    def loss(self, losses, stride=1, log_scale = True):
+        if log_scale:
+            self.p3.setLogMode(x=False, y=True)
+        self.c31.setData(losses[0:-1:stride])
+
+### -------------------------------------------
+###   Generator ( Encoder + Decoder )
+###   - output estimated clean wav
+### -------------------------------------------
 def Wave_U_Net(Noisy):
+
     ds_outputs = list()
     num_initial_filters = 24
     num_layers = 12
@@ -63,16 +157,31 @@ def Wave_U_Net(Noisy):
     b = I.ConstantInitializer()
     w = I.NormalInitializer(sigma=0.02)
 
-    ##  Sub-functions
+    ##     Sub-functions
     ## ---------------------------------
 
-    # Convolution
+    #   Convolution
     def conv(x, output_ch, karnel=(15,), pad=(7,), stride=(1,), name=None):
         return PF.convolution(x, output_ch, karnel, pad=pad, stride=stride, w_init=w, b_init=b, name=name)
         
-    # Activation Function
+    #   Activation Function
     def af(x, alpha=0.2):
         return F.leaky_relu(x, alpha)
+
+    #
+    def crop_and_concat(x1, x2):
+
+        def crop(tensor, target_times):
+            shape = tensor.shape[2]
+            diff = shape - target_times
+            if diff == 0:
+                return tensor
+            crop_start = diff // 2
+            crop_end = diff - crop_start
+            return F.slice(tensor, start=(0, 0, crop_start), stop=(tensor.shape[0], tensor.shape[1], shape - crop_end), step=(1, 1, 1))
+
+        x1 = crop(x1, x2.shape[2])
+        return F.concatenate(x1, x2, axis=1)
 
     def downsampling_block(x, i):
         with nn.parameter_scope( ('ds_block-%2d' % i) ):
@@ -81,14 +190,13 @@ def Wave_U_Net(Noisy):
             #ds_slice = F.average_pooling(ds, kernel=(1, 1,), stride=(1, 2,), pad=(0, 0,))
             return ds, ds_slice
 
-    
     def upsampling_block(x, i):
+
         with nn.parameter_scope( ('us_block-%2d' % i) ):
             up = F.unpooling(af(x), (2,))
             cac_x = crop_and_concat(ds_outputs[-i-1], up)
             us = af(conv(cac_x, num_initial_filters+num_initial_filters*(num_layers-i-1), (merge_filter_size,), (2,), name='conv'))
             return us
-
 
     with nn.parameter_scope('Wave-U-Net'):
         current_layer = Noisy
@@ -214,8 +322,8 @@ def train(args):
         print('')
 
         #  Batch iteration
-        for j in range(0, 4000, 2):
-            print('  Train (Epoch. {0}) - {1}/{2}'.format(i+1, j+2, 4000))
+        for j in range(batches.batch_num):
+            print('  Train (Epoch. {0}) - {1}/{2}'.format(i+1, j+2, batches.batch_num))
 
             ##  Batch setting
             clean.d, noisy.d = batches.next(j)
@@ -254,95 +362,9 @@ def train(args):
     exporter = pg.exporters.ImageExporter(fig.win.scene())  # exportersの直前に pg.QtGui.QApplication.processEvents() を呼ぶ！
     exporter.export(os.path.join(args.model_save_path, 'plot_{:04}.png'.format(i + 1))) # save fig
 
-## Display
-class display:
-
-    # Remaining Time Estimation
-    class time_estimation:
-
-        def __init__(self, epoch_from, epoch, batch_num):
-            self.start = time.time()
-            self.epoch = epoch
-            self.epoch_from = epoch_from
-            self.batch = batch_num
-            self.all = batch_num * (epoch - epoch_from)
-
-        def __call__(self, epoch_num, batch_num):
-            elapse = time.time() - self.start
-            amount = (batch_num + 1) + (epoch_num - self.epoch_from) * self.batch
-            remain = elapse / amount * (self.all - amount)
-
-            hours, mins = divmod(elapse, 3600)
-            mins, sec = divmod(mins, 60)
-            hours_e, mins_e = divmod(remain, 3600)
-            mins_e, sec_e = divmod(mins_e, 60)
-
-            elapse_time = [int(hours), int(mins), int(sec)]
-            remain_time = [int(hours_e), int(mins_e), int(sec_e)]
-
-            return elapse_time, remain_time
-
-    def __init__(self, epoch_from, epoch, batch_num):
-
-        self.tm = self.time_estimation(epoch_from, epoch, batch_num)
-        self.batch = batch_num
-
-    def __call__(self, epoch, trial, losses):
-
-        elapse_time, remain_time = self.tm(epoch, trial)
-        print('  ---------------------------------------------------')
-        print('  [ Epoch  # {0},    Trials  # {1}/{2} ]'.format(epoch + 1, trial + 1, self.batch))
-        print('    +  Mean Squared Loss        = {:.4f}'.format(losses))
-        print('    -------------------------')
-        print('    +  Elapsed Time            : {0[0]:3d}h {0[1]:02d}m {0[2]:02d}s'.format(elapse_time))
-        print('    +  Expected Remaining Time : {0[0]:3d}h {0[1]:02d}m {0[2]:02d}s'.format(remain_time))
-        print('  ---------------------------------------------------')
-
-
-## Create figure object and plot
-class figout:
-    def __init__(self):
-
-        ## Create Graphic Window
-        self.win = pg.GraphicsWindow(title="")
-        self.win.resize(800, 600)
-        self.win.setWindowTitle('pyqtgraph example: Plotting')
-        self.win.setBackground("#FFFFFFFF")
-        pg.setConfigOptions(antialias=True)     # Anti-Aliasing for clear plotting
-
-        ## Graph Layout
-        #   1st Col: Speech Waveform
-        self.p1 = self.win.addPlot(title="Source 1 Waveform")
-        self.p1.addLegend()
-        self.c11 = self.p1.plot(pen=(255, 0, 0, 255), name="In")
-        self.c12 = self.p1.plot(pen=(0, 255, 0, 150), name="Out1")
-        self.c13 = self.p1.plot(pen=(0, 0, 255, 90), name="Clean")
-        self.win.nextRow()
-        self.p2 = self.win.addPlot(title="Source 2 Waveform")
-        self.p2.addLegend()
-        self.c21 = self.p2.plot(pen=(255, 0, 0, 255), name="In")
-        self.c22 = self.p2.plot(pen=(0, 255, 0, 150), name="Out2")
-        self.c23 = self.p2.plot(pen=(0, 0, 255, 90), name="Clean")
-        self.win.nextRow()
-        #   2st Col-1: Loss
-        self.p3 = self.win.addPlot(title="Loss")
-        self.p3.addLegend()
-        self.c31 = self.p3.plot(pen=(255, 0, 0, 255), name="losses")
-        self.win.nextRow()
-
-    def waveform_1(self, noisy, target, clean, stride=10):
-        self.c11.setData(noisy[0:-1:stride])
-        self.c12.setData(target[0:-1:stride])
-        self.c13.setData(clean[0:-1:stride])
-
-    def waveform_2(self, noisy, target, clean, stride=10):
-        self.c21.setData(noisy[0:-1:stride])
-        self.c22.setData(target[0:-1:stride])
-        self.c23.setData(clean[0:-1:stride])
-
-    def loss(self, losses, stride=10):
-        self.c31.setData(losses[0:-1:stride])
-
+# -------------------------------------------
+#   Test processing
+# -------------------------------------------
 def test(args):
 
     ##  Load data & Create batch
@@ -376,6 +398,7 @@ def test(args):
         output = output_t.d.flatten()
         output_ts.append(output)
         bt_idx += (test_batch_size*2)
+
     if (clean_data.shape[0]%(test_batch_size*2)) != 0:
         last_batch_size_2 = clean_data.shape[0]%(test_batch_size*2)
         print(last_batch_size_2)
@@ -399,7 +422,6 @@ def test(args):
         output_ts.append(output)
         bt_idx += (last_batch_size_2)
 
-
     output = output_ts[0]
     for i in range(1, len(output_ts)):
         output = np.concatenate([output, output_ts[i]], axis=0)
@@ -418,12 +440,28 @@ def test(args):
 
 if __name__ == '__main__':
 
-    # Load settings
+    ## Load settings
     args = settings()
 
     ## GPU connection
-    # - Float 32-bit precision mode :
-    ctx = get_extension_context('cudnn', device_id=args.device_id)
-    nn.set_default_context(ctx)
-    train(args)
-    test(args)
+    if args.halfprec:
+        # - Float 16-bit precision mode : When GPU memory often gets stack, please use it.
+        ctx = get_extension_context('cudnn', device_id=args.device_id, type_config='half')
+    else:
+        # - Float 32-bit precision mode :
+        ctx = get_extension_context('cudnn', device_id=args.device_id)
+
+    ## Training or Prediction
+    Train = 1
+    if Train:
+        # Training
+        nn.set_default_context(ctx)
+        train(args)
+    else:
+        # Test
+        # test(args)
+        import glob
+        clean_wavs = glob.glob(args.clean_test_path + '/*.wav')
+        reconst_wavs = glob.glob('pred_100_conv' + '/*.wav')
+        pesq_score(clean_wavs, reconst_wavs)
+
