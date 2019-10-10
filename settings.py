@@ -25,12 +25,11 @@ class settings:
         self.epoch_from         = 0                   # Epoch No. from that Retraining starts (init:0)
 
         # Save path
-        self.model_save_path    = 'params_prop'          # Network model path
+        self.model_save_path    = 'params'          # Network model path
         self.model_save_cycle   = 2                 # Epoch cycle for saving model (init:1)
 
         # Save wav path
-        #self.wav_save_path      = ('pred_%d'%(self.epoch))
-        self.wav_save_path      = 'pred_100_prop'
+        self.wav_save_path      = ('pred_%d'%(self.epoch))
 
         # Wave files
         self.clean_train_path   = '../00_data/SEGAN/clean_trainset_wav'     # Folder containing clean wav (train)
