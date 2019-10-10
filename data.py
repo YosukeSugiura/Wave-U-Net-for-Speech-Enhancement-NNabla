@@ -1,5 +1,8 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
+#
+#	Data Creator for SEGAN
+#
+#
+
 from __future__ import absolute_import
 
 import math
@@ -80,6 +83,9 @@ def data_loader(test=False, preemph=0.95, need_length=False):
     if not os.path.exists(args.model_save_path):    # Folder of model
         os.makedirs(args.model_save_path)
 
+    if not os.path.exists(args.wav_save_path):    # Folder of model
+        os.makedirs(args.wav_save_path)
+
     if not os.path.exists(args.train_pkl_path):     # Folder of train pkl
         os.makedirs(args.train_pkl_path)
 
@@ -97,6 +103,7 @@ def data_loader(test=False, preemph=0.95, need_length=False):
         wav_noisy   = args.noisy_test_path + '/*.wav'
         pkl_clean   = args.test_pkl_path + '/' + args.test_pkl_clean
         pkl_noisy   = args.test_pkl_path + '/' + args.test_pkl_noisy
+        pkl_length  = args.test_pkl_path + '/' + args.test_pkl_length
 
 
     ##   No pkl files -> read wav + create pkl files
@@ -125,10 +132,11 @@ def data_loader(test=False, preemph=0.95, need_length=False):
         with open(pkl_noisy, 'wb') as f:
             joblib.dump(ndata, f, protocol=-1,compress=3)
 
-        #if (not os.access(pkl_length, os.F_OK)) and test:
-        #    # Create length pkl file
-        #    with open(pkl_length, 'wb') as f:
-        #        joblib.dump(lendata, f, protocol=-1,compress=3)
+        if test:
+            if (not os.access(pkl_length, os.F_OK)):
+                # Create length pkl file
+                with open(pkl_length, 'wb') as f:
+                    joblib.dump(lendata, f, protocol=-1,compress=3)
 
 	##  Pkl files exist -> Load
     ## -------------------------------------------------
@@ -143,8 +151,16 @@ def data_loader(test=False, preemph=0.95, need_length=False):
         with open(pkl_noisy, 'rb') as f:
             ndata = joblib.load(f)
 
+        if test:
+            # Load length pkl file
+            print(' Load Noisy Pkl...')
+            with open(pkl_length, 'rb') as f:
+                lendata = joblib.load(f)
 
-    return cdata, ndata
+    if not test:
+        return cdata, ndata
+    else:
+        return cdata, ndata, lendata
 
 
 
@@ -165,6 +181,8 @@ class create_batch:
         self.clean = np.expand_dims(normalize(clean_data),axis=1)     # (D,8192,1) -> (D,1,8192)
         self.noisy = np.expand_dims(normalize(noisy_data),axis=1)     # (D,8192,1) -> (D,1,8192)
 
+        rd.seed(123)
+
         # Random index ( for data scrambling)
         ind = np.array(range(len(clean_data)-1))
         rd.shuffle(ind)
@@ -176,6 +194,7 @@ class create_batch:
         self.len = len(clean_data)                                  # Data length
         self.index = 0                                              # Start Position for data loading
 
+    ## 	Shuffle Data
     def shuffle(self):
         ind = np.array(range(self.len - 1))
         rd.shuffle(ind)
@@ -189,7 +208,7 @@ class create_batch:
 
         # Reconstructing clean & noisy batch : (*, 1,8192) -> (*, 1,16384)
         return np.concatenate((self.clean[index],self.clean[index+1]),axis=2), \
-               np.concatenate((self.noisy[index],self.noisy[index+1]),axis=2)
+               np.concatenate((self.noisy[index],self.noisy[index+1]),axis=2),
 
 
 class create_batch_test:
