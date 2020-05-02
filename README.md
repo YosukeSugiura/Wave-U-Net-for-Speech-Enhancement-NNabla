@@ -22,7 +22,7 @@ Please install the following packages with pip.
   - joblib  
   - pyQT5  
   - pyqtgraph  (after installing pyQT5)
-  - pypesq (see ["install with pip"](https://github.com/ludlows/python-pesq#install-with-pip) in offical site)
+  - pypesq (see ["install with pip"](https://github.com/ludlows/python-pesq#install-with-pip) on offical site)
   
   ## Contents
 
