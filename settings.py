@@ -32,10 +32,10 @@ class settings:
         self.wav_save_path      = ('pred_%d'%(self.epoch))
 
         # Wave files
-        self.clean_train_path   = 'clean_trainset_wav'     # Folder containing clean wav (train)
-        self.noisy_train_path   = 'noisy_trainset_wav'     # Folder containing noisy wav (train)
-        self.clean_test_path    = 'clean_testset_wav'      # Folder containing clean wav (test)
-        self.noisy_test_path    = 'noisy_testset_wav'      # Folder containing noisy wav (test)
+        self.clean_train_path   = 'data/clean_trainset_wav'     # Folder containing clean wav (train)
+        self.noisy_train_path   = 'data/noisy_trainset_wav'     # Folder containing noisy wav (train)
+        self.clean_test_path    = 'data/clean_testset_wav'      # Folder containing clean wav (test)
+        self.noisy_test_path    = 'data/noisy_testset_wav'      # Folder containing noisy wav (test)
 
         # Pkl files for train
         self.train_pkl_path     = 'pkl'             # Folder of pkl files for train
