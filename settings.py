@@ -14,19 +14,14 @@ class settings:
         # Parameters
         self.batch_size 	    = 50                # Batch size
         self.epoch              = 100               # Epoch
-        self.learning_rate      = 0.0002            # Learning Rate (Generator)
-        self.learning_rate_dis  = 0.0002            # Learning Rate (Discriminator)
-        self.learning_rate_map  = 0.001             # Learning Rate (Generator)
-        self.weight_decay       = 0.0001
-        self.decay_rate1        = 0.9
-        self.decay_rate2        = 0.99
+        self.learning_rate      = 0.0002            # Learning Rate
 
         # Retrain
         self.epoch_from         = 0                   # Epoch No. from that Retraining starts (init:0)
 
         # Save path
         self.model_save_path    = 'params'          # Network model path
-        self.model_save_cycle   = 2                 # Epoch cycle for saving model (init:1)
+        self.model_save_cycle   = 2                 # Epoch cycle for saving model (init:2)
 
         # Save wav path
         self.wav_save_path      = ('pred_%d'%(self.epoch))
