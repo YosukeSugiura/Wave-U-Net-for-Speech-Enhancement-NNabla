@@ -22,7 +22,12 @@ Please install the following packages with pip.
   - joblib  
   - pyQT5  
   - pyqtgraph  (after installing pyQT5)
-  - pypesq (see ["install with pip"](https://github.com/ludlows/python-pesq#install-with-pip) on offical site)
+  - pypesq (see ["install with pip"](https://github.com/ludlows/python-pesq#install-with-pip) on offical site)  
+    In the latest version, the package name is changed to `pesq`.
+    If you install `pesq`, change 'pypesq' to `pesq` in 25th line in `wave-u-net.py` as
+    ```@Python
+    from pesq import pesq as pypesq
+    ```
   
   ## Contents
 
