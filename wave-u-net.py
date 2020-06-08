@@ -320,6 +320,8 @@ def train(args):
         print('  Epoch :: {0}/{1}'.format(i + 1, args.epoch))
         print(' =========================================================')
         print('')
+        
+        batches.shuffle()
 
         #  Batch iteration
         for j in range(batches.batch_num):
