@@ -50,8 +50,12 @@ Please install the following packages with pip.
         - ```pickle``` folder  :  save pickled database "~.pkl".
         - ```params``` folder  :  save parameters including network models.
 
-   3.   Download  the following 4 dataset, and unzip them.
+   3.   Download  the following 4 dataset, and unzip them from  
+        
+        Noisy speech database for training speech enhancement algorithms and TTS models  
+        https://datashare.is.ed.ac.uk/handle/10283/2791
 
+        [ Direct Links ]
           - [clean_trainset_wav.zip](http://datashare.is.ed.ac.uk/bitstream/handle/10283/1942/clean_trainset_wav.zip)
           - [noisy_trainset_wav.zip](http://datashare.is.ed.ac.uk/bitstream/handle/10283/1942/noisy_trainset_wav.zip)
           - [clean_testset_wav.zip](http://datashare.is.ed.ac.uk/bitstream/handle/10283/1942/clean_testset_wav.zip)
